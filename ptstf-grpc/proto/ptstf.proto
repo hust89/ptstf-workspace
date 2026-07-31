@@ -1,0 +1,44 @@
+syntax = "proto3";
+package ptstf;
+
+service PtstfService {
+  rpc EvaluateConductance (ConductanceRequest) returns (ConductanceResponse);
+  rpc AuditFlowCurves (FlowRequest) returns (FlowResponse);
+}
+
+message Coordinate2D {
+  double x = 1;
+  double y = 2;
+}
+
+message ConductanceRequest {
+  Coordinate2D target = 1;
+  repeated Coordinate2D embeddings = 2;
+  repeated double discrete_conductances = 3;
+  double eta = 4;
+}
+
+message ConductanceResponse {
+  double value = 1;
+}
+
+message CurveData {
+  Coordinate2D p0 = 1;
+  Coordinate2D p1 = 2;
+  Coordinate2D p2 = 3;
+}
+
+message FlowRequest {
+  repeated CurveData curves = 1;
+  double a = 2;
+  double b = 3;
+}
+
+message AuditResult {
+  double bending_energy = 1;
+  bool crosses_boundary = 2;
+}
+
+message FlowResponse {
+  repeated AuditResult results = 1;
+}

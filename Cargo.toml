@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "ptstf-core",
+    "ptstf-grpc",
+    "ptstf-desktop"
+]
+resolver = "2"

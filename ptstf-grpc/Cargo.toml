@@ -1,0 +1,15 @@
+[package]
+name = "ptstf-grpc"
+version = "1.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tonic = "0.10"
+prost = "0.12"
+tokio = { version = "1.32", features = ["full"] }
+ptstf-core = { path = "../ptstf-core" }
+nalgebra = "0.32"
+
+[build-dependencies]
+tonic-build = "0.10"

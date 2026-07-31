@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PTSTF Visualizer v1.1</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #0c0f12; color: #e2e8f0; font-family: sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        #interface { position: absolute; z-index: 10; padding: 20px; background: rgba(15, 23, 42, 0.85); border-radius: 12px; margin: 20px; border: 1px solid #1e293b; width: 320px; }
+    </style>
+</head>
+<body>
+    <div id="interface">
+        <h2>📊 PTSTF v1.1 Visualizer</h2>
+        <hr style="border-color:#334155;">
+        <p>Real-Time GPU Cheeger Level Contours and Analytical Pathway Rendering Engine.</p>
+        <div id="stats">Ready. Evaluating active curve topology...</div>
+    </div>
+    <canvas id="glcanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl');
+
+        if (!gl) {
+            document.getElementById('stats').innerText = "WebGL not supported!";
+        }
+
+        const vsSource = `
+            attribute vec2 position;
+            varying vec2 vUV;
+            void main() {
+                vUV = position * 0.5 + 0.5;
+                gl_Position = vec4(position, 0.0, 1.0);
+            }
+        `;
+
+        const fsSource = `
+            precision mediump float;
+            varying vec2 vUV;
+            uniform vec2 u_embeddings[3];
+            uniform float u_conductances[3];
+            uniform float u_eta;
+            
+            void main() {
+                float numerator = 0.0;
+                float denominator = 0.0;
+                float eta_factor = -2.0 * u_eta * u_eta;
+                
+                for(int i = 0; i < 3; i++) {
+                    float dist_sq = dot(vUV - u_embeddings[i], vUV - u_embeddings[i]);
+                    float weight = exp(eta_factor * dist_sq);
+                    numerator += weight * u_conductances[i];
+                    denominator += weight;
+                }
+                
+                float h_val = denominator > 0.0 ? numerator / denominator : 0.0;
+                
+                // Render Cheeger Contours via high-contrast periodic sine waves [2]
+                float contour = sin(h_val * 30.0);
+                float edge = smoothstep(0.94, 0.97, contour);
+                
+                vec3 background = vec3(0.05, 0.07, 0.1);
+                vec3 contour_color = vec3(0.0, 0.8, 1.0);
+                
+                gl_FragColor = vec4(mix(background, contour_color, edge), 1.0);
+            }
+        `;
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        const program = gl.createProgram();
+        gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsSource));
+        gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsSource));
+        gl.linkProgram(program);
+        gl.useProgram(program);
+
+        const vertices = new Float32Array([
+            -1.0, -1.0,   1.0, -1.0,  -1.0,  1.0,
+            -1.0,  1.0,   1.0, -1.0,   1.0,  1.0,
+        ]);
+
+        const buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        const posAttr = gl.getAttribLocation(program, 'position');
+        gl.enableVertexAttribArray(posAttr);
+        gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+        // Bind uniform parameters for evaluation
+        gl.uniform2fv(gl.getUniformLocation(program, 'u_embeddings'), new Float32Array([
+            0.25, 0.25,
+            0.75, 0.75,
+            0.50, 0.20
+        ]));
+        gl.uniform1fv(gl.getUniformLocation(program, 'u_conductances'), new Float32Array([0.15, 0.85, 0.45]));
+        gl.uniform1f(gl.getUniformLocation(program, 'u_eta'), 1.25);
+
+        function render() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        window.addEventListener('resize', render);
+        render();
+    </script>
+</body>
+</html>

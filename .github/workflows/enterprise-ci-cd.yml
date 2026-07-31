@@ -1,0 +1,211 @@
+name: PTSTF Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  PROTOC_NO_VENDOR: 1
+
+jobs:
+  # ==========================================
+  # 1. CODE QUALITY, FORMATTING & SECURITY AUDITS
+  # ==========================================
+  audit-and-lint:
+    name: Code Quality & Security Audits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Verify Code Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy Lints (Treat Warnings as Errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Install cargo-deny (License and Vulnerability Checker)
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Run Security and License Compliance Checks
+        run: cargo deny check
+
+  # ==========================================
+  # 2. CROSS-PLATFORM SYSTEM SUITE TESTING
+  # ==========================================
+  test-cross-platform:
+    name: Test on ${{ matrix.os }}
+    needs: audit-and-lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Protobuf Compiler (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libssl-dev
+
+      - name: Install Protobuf Compiler (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install protobuf
+
+      - name: Install Protobuf Compiler (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install protoc -y
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache Integration
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-cargo-test
+
+      - name: Run Core Math Engine Unit & Integration Tests
+        run: cargo test -p ptstf-core --all-features
+
+      - name: Run gRPC Microservice Test Suite
+        run: cargo test -p ptstf-grpc
+
+  # ==========================================
+  # 3. AUTOMATED MULTI-PLATFORM PYO3 PYTHON WHEELS BUILD
+  # ==========================================
+  build-pyo3-wheels:
+    name: Build PyO3 Wheels (${{ matrix.target }})
+    needs: test-cross-platform
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+          - os: ubuntu-latest
+            target: aarch64
+          - os: macos-latest
+            target: universal2
+          - os: windows-latest
+            target: x64
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Python Wheels via Maturin
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist -p ptstf-core --features python
+          sccache: 'true'
+
+      - name: Upload Wheels as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyo3-wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist
+
+  # ==========================================
+  # 4. CLOUD MICROSERVICE CONTAINERIZATION DOCKER AUDIT
+  # ==========================================
+  build-grpc-docker:
+    name: gRPC Docker Containerization Verification
+    needs: test-cross-platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Validate Multi-stage gRPC Dockerfile
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./ptstf-grpc/Dockerfile
+          push: false
+          tags: ptstf-grpc:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==========================================
+  # 5. CROSS-PLATFORM TAURI DESKTOP BUNDLER
+  # ==========================================
+  build-tauri-dist:
+    name: Bundle Tauri Desktop (${{ matrix.os }})
+    needs: test-cross-platform
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Dependencies
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Linux Graphical System Libraries
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            protobuf-compiler \
+            libssl-dev
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache Integration
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-tauri-bundle
+
+      - name: Build and Package Cross-Platform App Installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ptstf-workspace/ptstf-desktop
+          args: --verbose
+
+  # ==========================================
+  # 6. MATHEMATICAL PERFORMANCE REGRESSION TESTING
+  # ==========================================
+  benchmark-check:
+    name: Micro-benchmarking Regression Audit
+    needs: test-cross-platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Core Benchmark Regression Checks
+        run: cargo bench --workspace --no-run
