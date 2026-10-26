@@ -48,7 +48,7 @@ fn main() {
     
     let start_tensor = Instant::now();
     let tensor = TransitionTensor::new(tensor_data, tensor_dim).unwrap();
-    let factors = tensor.decompose(10, 15).unwrap(); // Rank 10, 15 iterations
+    let _factors = tensor.decompose(10, 15).unwrap(); // Rank 10, 15 iterations
     let tensor_duration = start_tensor.elapsed();
     println!("   ✔ NCP Decomposition complete!");
     println!("   ✔ Density: strictly non-negative factor matrices generated.");
