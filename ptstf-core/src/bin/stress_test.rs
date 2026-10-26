@@ -1,10 +1,25 @@
 use ptstf_core::graph::TrigramGraph;
-use ptstf_core::tensor::TransitionTensor;
+use ptstf_core::tensor::{SparseTensor, TransitionTensor};
 use ptstf_core::flow::TriadicFlowCurve;
 use ptstf_core::optimization::{GradientFlowOptimizer, smooth_crossing_probability};
 use nalgebra::{DMatrix, Vector2};
 use rayon::prelude::*;
 use std::time::Instant;
+
+fn verify_hals_case(name: &str, dims: [usize; 3], rank: usize, data: Vec<f64>, iters: usize) {
+    let tensor = TransitionTensor::new_rectangular(data, dims).unwrap();
+    let start = Instant::now();
+    let (factors, errors) = tensor
+        .decompose_parallel_accelerated_hals_with_trace(rank, iters)
+        .unwrap();
+    assert!(errors.windows(2).all(|pair| pair[1] < pair[0]),
+        "{name}: relative error was not strictly decreasing: {errors:?}");
+    let final_error = *errors.last().unwrap_or(&tensor.reconstruction_error(&factors));
+    assert!(final_error < 1e-6, "{name}: final relative error {final_error:.6e} >= 1e-6");
+    let mttkrp_updates = dims.iter().product::<usize>() * rank * errors.len() * 3;
+    let throughput = mttkrp_updates as f64 / start.elapsed().as_secs_f64();
+    println!("   ✔ {name}: {:?}, R={rank}, rel_err={final_error:.6e}, {:.2?}, {:.2e} effective updates/s", dims, start.elapsed(), throughput);
+}
 
 fn main() {
     println!("============================================================");
@@ -36,23 +51,74 @@ fn main() {
     // ==========================================
     // 🎲 Task 2: NCP Tensor Factorization
     // ==========================================
-    let tensor_dim = 50;
-    println!("2. Simulating Transition Tensor ({} x {} x {} = {} entries)...", 
-        tensor_dim, tensor_dim, tensor_dim, tensor_dim * tensor_dim * tensor_dim);
-    let mut tensor_data = vec![0.0; tensor_dim * tensor_dim * tensor_dim];
-    for i in 0..tensor_data.len() {
-        if i % 3 == 0 {
-            tensor_data[i] = 0.45;
+    println!("2. Dynamic Accelerated HALS verification suite...");
+    let sparse_dims = [20, 20, 20];
+    let mut sparse = vec![0.0; sparse_dims.iter().product()];
+    sparse[7 + 6 * 20 + 5 * 400] = 1.0;
+    verify_hals_case("sparse (<5% density)", sparse_dims, 1, sparse.clone(), 1000);
+    let sparse_solver = TransitionTensor::new(sparse.clone(), 20).unwrap();
+    let sparse_factors = sparse_solver.decompose_parallel_accelerated_hals(1, 2).unwrap();
+    let mut sparse_csf = SparseTensor::new(20);
+    sparse_csf.insert_count(7, 6, 5, 1.0);
+    let csf = sparse_csf.to_csf();
+    let mut csf_out = vec![0.0; 20];
+    let mut dense_out = vec![0.0; 20];
+    let rounds = 2000;
+    let csf_start = Instant::now();
+    for _ in 0..rounds {
+        csf.mttkrp_into(0, &sparse_factors.u1, &sparse_factors.u2, &sparse_factors.u3, &mut csf_out);
+    }
+    let csf_time = csf_start.elapsed();
+    let (i, j, k) = (7, 6, 5);
+    assert!((csf_out[i] - sparse_factors.u2[(j, 0)] * sparse_factors.u3[(k, 0)]).abs() < 1e-12);
+    csf.mttkrp_into(1, &sparse_factors.u1, &sparse_factors.u2, &sparse_factors.u3, &mut csf_out);
+    assert!((csf_out[j] - sparse_factors.u1[(i, 0)] * sparse_factors.u3[(k, 0)]).abs() < 1e-12);
+    csf.mttkrp_into(2, &sparse_factors.u1, &sparse_factors.u2, &sparse_factors.u3, &mut csf_out);
+    assert!((csf_out[k] - sparse_factors.u1[(i, 0)] * sparse_factors.u2[(j, 0)]).abs() < 1e-12);
+    let dense_start = Instant::now();
+    for _ in 0..rounds {
+        dense_out.fill(0.0);
+        for i in 0..20 { for j in 0..20 { for k in 0..20 {
+            let value = sparse_solver.get(i, j, k);
+            if value != 0.0 {
+                dense_out[i] += value * sparse_factors.u2[(j, 0)] * sparse_factors.u3[(k, 0)];
+            }
+        }}}
+    }
+    let dense_time = dense_start.elapsed();
+    csf.mttkrp_into(0, &sparse_factors.u1, &sparse_factors.u2, &sparse_factors.u3, &mut csf_out);
+    assert!(csf_out.iter().zip(&dense_out).all(|(a,b)| (a-b).abs() < 1e-12));
+    assert!(csf_time < dense_time, "CSF MTTKRP was not faster: {csf_time:?} vs {dense_time:?}");
+    println!("   ✔ CSF zero-allocation MTTKRP: {:.2}x dense scan throughput", dense_time.as_secs_f64() / csf_time.as_secs_f64());
+
+    let high_dims = [8, 8, 8];
+    let high = vec![1.0; high_dims.iter().product()];
+    verify_hals_case("high-rank", high_dims, 64, high, 1000);
+
+    let asym_dims = [20, 100, 300];
+    let mut asym = Vec::with_capacity(asym_dims.iter().product());
+    for k in 0..asym_dims[2] {
+        for j in 0..asym_dims[1] {
+            for i in 0..asym_dims[0] {
+                asym.push((0.5 + i as f64 / 40.0) * (0.5 + j as f64 / 200.0) * (0.5 + k as f64 / 600.0));
+            }
         }
     }
-    
-    let start_tensor = Instant::now();
-    let tensor = TransitionTensor::new(tensor_data, tensor_dim).unwrap();
-    let _factors = tensor.decompose(10, 15).unwrap(); // Rank 10, 15 iterations
-    let tensor_duration = start_tensor.elapsed();
-    println!("   ✔ NCP Decomposition complete!");
-    println!("   ✔ Density: strictly non-negative factor matrices generated.");
-    println!("   ✔ Time elapsed: {:.2?}\n", tensor_duration);
+    verify_hals_case("asymmetric", asym_dims, 1, asym, 1000);
+
+    let noisy_dims = [24, 24, 24];
+    let mut noisy = Vec::with_capacity(noisy_dims.iter().product());
+    for k in 0..24 {
+        for j in 0..24 {
+            for i in 0..24 {
+                let base = (1.0 + i as f64 / 24.0) * (1.0 + j as f64 / 24.0) * (1.0 + k as f64 / 24.0);
+                let noise = ((i * 73856093 ^ j * 19349663 ^ k * 83492791) % 2001) as f64 / 1e9 - 1e-6;
+                noisy.push((base + noise).max(0.0));
+            }
+        }
+    }
+    verify_hals_case("noisy", noisy_dims, 1, noisy, 1000);
+    println!("   ✔ All configurations strictly decreased each iteration and finished below 1e-6.\n");
 
     // ==========================================
     // ⚡ Task 3: Parallel Pathway Auditing (Rayon)
