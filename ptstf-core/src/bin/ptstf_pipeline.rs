@@ -329,7 +329,7 @@ fn main() {
         .map(|(idx, val)| (val, idx))
         .collect();
 
-    eigen_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    eigen_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.1.cmp(&b.1)));
 
     let fiedler_idx = eigen_pairs[1].1;
     let third_ev_idx = eigen_pairs[2].1;

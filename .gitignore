@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/target/
+
+# Backups from tensor.rs refactor (keep on disk, not in git)
+*.rs.orig
+*.rs.before_*
+ptstf-core/archive/
+
+# Local cargo config
+.cargo/
+
+# Generated code
+gen/
+ptstf-desktop/gen/
+
+# Corpora (downloaded, large)
+moby_dick.txt
+ptstf-desktop/moby_dick.txt
+alice.txt
+
+# Generated reports
+ptstf_analysis_report.json
+*_ptstf_report.json
+ptstf-desktop/ptstf_analysis_report.json
+
+# Profiling artifacts
+flamegraph.svg
+*.bak

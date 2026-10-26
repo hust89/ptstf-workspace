@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="100" fill="#0b1120"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#38bdf8" stroke-width="12" opacity="0.6"/>
+  <path d="M 120 360 Q 256 80 392 360" fill="none" stroke="#00d4ff" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="120" cy="360" r="18" fill="#38bdf8"/>
+  <circle cx="256" cy="220" r="18" fill="#818cf8"/>
+  <circle cx="392" cy="360" r="18" fill="#c084fc"/>
+  <text x="256" y="440" font-family="sans-serif" font-size="42" font-weight="bold" fill="#f8fafc" text-anchor="middle">PTSTF</text>
+</svg>
