@@ -47,7 +47,7 @@ impl TriadicFlowCurve {
                 cx.abs() < EPSILON
             } else {
                 let s = -cx / bx;
-                s >= 0.0 && s <= 1.0
+                (0.0..=1.0).contains(&s)
             }
         } else {
             let discriminant = bx * bx - 4.0 * ax * cx;
@@ -57,7 +57,7 @@ impl TriadicFlowCurve {
                 let sqrt_disc = discriminant.sqrt();
                 let s1 = (-bx + sqrt_disc) / (2.0 * ax);
                 let s2 = (-bx - sqrt_disc) / (2.0 * ax);
-                (s1 >= 0.0 && s1 <= 1.0) || (s2 >= 0.0 && s2 <= 1.0)
+                (0.0..=1.0).contains(&s1) || (0.0..=1.0).contains(&s2)
             }
         }
     }

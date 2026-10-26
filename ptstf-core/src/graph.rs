@@ -1,5 +1,5 @@
-use nalgebra::DMatrix;
 use crate::PtstfError;
+use nalgebra::DMatrix;
 
 pub struct TrigramGraph {
     pub adjacency: DMatrix<f64>,
@@ -9,10 +9,15 @@ pub struct TrigramGraph {
 impl TrigramGraph {
     pub fn new(adjacency: DMatrix<f64>) -> Result<Self, PtstfError> {
         if !adjacency.is_square() {
-            return Err(PtstfError::InvalidParameter("Adjacency matrix must be square".to_string()));
+            return Err(PtstfError::InvalidParameter(
+                "Adjacency matrix must be square".to_string(),
+            ));
         }
         let num_nodes = adjacency.nrows();
-        Ok(Self { adjacency, num_nodes })
+        Ok(Self {
+            adjacency,
+            num_nodes,
+        })
     }
 
     /// Computes the Symmetric Normalized Graph Laplacian: L_sym = I - D^(-1/2) * A * D^(-1/2)
