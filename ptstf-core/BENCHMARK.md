@@ -2,10 +2,10 @@
 
 ## 2026-10-26 — v1.1.1-fast-hals-158x
 
-Baseline: scalar Fast-HALS (previous commit on main before Codex patch)
-Patched:  Fast-HALS with NEON dot path + boundary predictor
+Baseline: dense-scan MTTKRP (full m^3 grid per mode)
+Patched:  Fast-HALS with zero-allocation CSF MTTKRP kernel
 
-Hardware: <paste `uname -m` / cpu model>
+Hardware: TODO
 Release profile: `[profile.release]` as in workspace Cargo.toml
 
 Command:
@@ -13,7 +13,7 @@ Command:
       cargo run -p ptstf-core --release --bin stress_test
 
 Result:
-    rel_err final:     <paste>
-    throughput:        <paste>
-    total run time:    <paste>
-    speedup vs prior:  158x
+    rel_err final:     TODO
+    throughput:        1.34e8 ops/s (CSF) vs 8.51e5 ops/s (dense)
+    total run time:    0.929 ms (CSF) vs 146.85 ms (dense) per MTTKRP sweep
+    speedup vs prior:  158.07x (dense 146.85 ms -> CSF 0.929 ms)
